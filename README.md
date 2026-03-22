@@ -1,6 +1,6 @@
 # Tesla Tracker
 
-Track your Tesla Model 3 energy usage, charging costs, and see how much you save compared to a gas car.
+Track your Tesla Model 3 energy usage, charging costs, and see how much you save compared to a gas car. Runs privately on your home NAS — no cloud accounts or subscriptions required.
 
 ## Features
 
@@ -11,100 +11,117 @@ Track your Tesla Model 3 energy usage, charging costs, and see how much you save
 
 ## Tech Stack
 
-- **Backend**: Python / FastAPI / SQLite (SQLAlchemy async) / APScheduler
+- **Backend**: Python / FastAPI / PostgreSQL / SQLAlchemy async / Alembic / APScheduler
 - **Frontend**: React 18 / Vite / TypeScript / Tailwind CSS / Recharts
+- **Deployment**: Docker Compose + GitHub Actions → NAS via Tailscale SSH
 
 ---
 
-## Setup
+## Local Development
 
-### 1. Tesla Developer Registration (one-time)
-
-1. Go to [developer.tesla.com](https://developer.tesla.com) and sign in with your Tesla account.
-2. Create a new application. Set:
-   - **Redirect URI**: `http://localhost:8000/api/auth/callback`
-   - **Allowed Origin**: `http://localhost:5173`
-3. Save your `CLIENT_ID` and `CLIENT_SECRET`.
-
-4. Generate an EC key pair (Tesla requires P-256 / secp256r1):
-   ```bash
-   openssl ecparam -name prime256v1 -genkey -noout -out private.pem
-   openssl ec -in private.pem -pubout -out public.pem
-   ```
-
-5. Replace the placeholder at `frontend/public/.well-known/appspecific/com.tesla.3p.public-key.pem` with the contents of `public.pem`.
-
-6. Register your domain with Tesla (for local dev, use `localhost`):
-   ```bash
-   # First get a partner token, then:
-   curl --request POST \
-     --url 'https://fleet-api.prd.na.vn.cloud.tesla.com/api/1/partner_accounts' \
-     --header 'Authorization: Bearer <PARTNER_TOKEN>' \
-     --header 'Content-Type: application/json' \
-     --data '{"domain": "localhost"}'
-   ```
-
-### 2. Backend Setup
+### 1. Backend
 
 ```bash
 cd backend
-
-# Create virtual environment
 python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
-
-# Install dependencies
+source venv/bin/activate
 pip install -r requirements.txt
-
-# Configure environment
 cp .env.example .env
-# Edit .env with your Tesla CLIENT_ID, CLIENT_SECRET, and generate an ENCRYPTION_KEY:
+# Edit .env — generate ENCRYPTION_KEY:
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-
-# Start the backend
 uvicorn app.main:app --reload --port 8000
 ```
 
-Visit [http://localhost:8000/docs](http://localhost:8000/docs) to see the API documentation.
-
-### 3. Frontend Setup
+### 2. Frontend
 
 ```bash
 cd frontend
-
 npm install
 npm run dev
 ```
 
 Visit [http://localhost:5173](http://localhost:5173).
 
-### 4. Connect Your Tesla
+### 3. Full stack with Docker
 
-1. Click **"Connect Tesla Account"** in the navbar (or visit `/connect`).
-2. You'll be redirected to Tesla's login page.
-3. Log in and approve the requested permissions.
-4. You'll be redirected back to the dashboard.
-5. The app will start polling your vehicle every 5 minutes.
+```bash
+docker compose up --build
+```
+
+---
+
+## Connect Your Tesla
+
+No Tesla developer account required. Uses the same token approach as TeslaMate:
+
+1. Visit **[myteslamate.com/tesla-token](https://www.myteslamate.com/tesla-token)** and log in with your Tesla account
+2. Copy the **Access Token** and **Refresh Token**
+3. Open the app → **Connect** page → paste both tokens → click Connect
+
+The app validates the tokens, discovers your vehicle, and starts polling every 5 minutes. Tokens refresh automatically. If they ever expire (~90 days unused), just repeat the steps above.
 
 ---
 
 ## How Trip Detection Works
 
-Tesla's Fleet API does not provide a trip history endpoint. Trips are reconstructed by:
+Tesla's Fleet API has no trip history endpoint. Trips are reconstructed by:
 
-1. Polling `vehicle_data` every 5 minutes (configurable in Settings).
-2. Watching the `shift_state` field: `P/null → D/R` = trip start, `D/R → P/null` = trip end.
+1. Polling `vehicle_data` every 5 minutes (configurable in Settings)
+2. Watching `shift_state`: `P/null → D/R` = trip start, `D/R → P/null` = trip end
 3. Computing energy used: `(start_battery_pct - end_battery_pct) / 100 × pack_capacity_kWh`
 
-**Note**: The car must be awake and not in sleep mode for polling to work. Short trips under 5 minutes may be missed if the poll happens after the trip ends.
+**Note**: Short trips under ~5 minutes may be missed if the poll happens after the trip ends.
 
 ## How Charging Works
 
-Charging sessions are pulled from Tesla's charging history API (`/api/1/dx/charging/history`):
-- Supercharger sessions include cost from Tesla's billing.
-- Home charging cost = `kWh added × your electricity rate` (set in Settings).
+Charging sessions are pulled from Tesla's charging history API:
+- Supercharger sessions include cost from Tesla's billing
+- Home charging cost = `kWh added × your electricity rate` (set in Settings)
 
-Click **"Sync Now"** in the Charging page or Settings to pull the latest history immediately.
+Click **Sync Now** on the Charging page to pull the latest history immediately.
+
+---
+
+## NAS Deployment
+
+The app deploys automatically on every push to `main` via GitHub Actions:
+
+1. Builds `backend` and `frontend` Docker images in parallel
+2. Pushes both to GitHub Container Registry (GHCR)
+3. Connects to the NAS via Tailscale SSH and runs `docker compose pull && up -d`
+
+### Required GitHub Secrets
+
+| Secret | Description |
+|--------|-------------|
+| `NAS_TAILSCALE_IP` | NAS Tailscale IP (100.x.x.x) |
+| `NAS_USER` | NAS SSH username |
+| `NAS_SSH_KEY` | NAS private SSH key |
+| `TS_OAUTH_CLIENT_ID` | Tailscale OAuth client ID (for CI access) |
+| `TS_OAUTH_CLIENT_SECRET` | Tailscale OAuth client secret |
+
+### NAS One-Time Setup
+
+SSH into the NAS and create `~/tesla-tracker/.env`:
+
+```
+ENCRYPTION_KEY=your_fernet_key
+DATABASE_URL=postgresql+asyncpg://tesla:tesla@db:5432/tesla_tracker
+FRONTEND_URL=http://your-nas-ip:8090
+TAILSCALE_HOSTNAME=your-nas-name.tail12345.ts.net
+```
+
+Generate `ENCRYPTION_KEY`:
+```bash
+python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Provision the Tailscale HTTPS cert:
+```bash
+sudo tailscale cert your-nas-name.tail12345.ts.net
+sudo chmod 644 /var/lib/tailscale/certs/*.crt
+sudo chmod 640 /var/lib/tailscale/certs/*.key
+```
 
 ---
 
@@ -112,10 +129,7 @@ Click **"Sync Now"** in the Charging page or Settings to pull the latest history
 
 | Variable | Description |
 |----------|-------------|
-| `TESLA_CLIENT_ID` | Your Tesla app client ID |
-| `TESLA_CLIENT_SECRET` | Your Tesla app client secret |
-| `TESLA_REDIRECT_URI` | OAuth callback URL |
-| `TESLA_AUDIENCE` | Tesla Fleet API base URL |
-| `ENCRYPTION_KEY` | Fernet key for encrypting stored tokens |
-| `DATABASE_URL` | SQLite connection string |
-| `FRONTEND_URL` | Frontend base URL for post-auth redirect |
+| `ENCRYPTION_KEY` | Fernet key for encrypting stored Tesla tokens |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `FRONTEND_URL` | Frontend base URL (used for CORS) |
+| `TAILSCALE_HOSTNAME` | NAS Tailscale hostname (for cert volume mount, NAS only) |

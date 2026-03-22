@@ -4,7 +4,7 @@ Personal web app to track Tesla Model 3 driving energy usage, charging costs, an
 
 ## Tech Stack
 
-**Backend**: Python FastAPI + SQLite (aiosqlite) + SQLAlchemy 2.0+ + APScheduler + httpx
+**Backend**: Python FastAPI + PostgreSQL (asyncpg) + SQLAlchemy 2.0+ + Alembic + APScheduler + httpx
 **Frontend**: React 18 + Vite + TypeScript + Tailwind CSS + Recharts + TanStack Query + Zustand
 
 ## Run Commands
@@ -15,6 +15,9 @@ cd backend && source venv/bin/activate && uvicorn app.main:app --reload --port 8
 
 # Frontend (port 5173)
 cd frontend && npm run dev
+
+# Full stack via Docker (local dev)
+docker compose up --build
 ```
 
 API docs: http://localhost:8000/docs
@@ -24,18 +27,19 @@ Frontend proxies `/api` requests to backend via Vite config.
 
 ```
 backend/app/
-  config.py          # Pydantic settings (loads .env)
+  config.py          # Pydantic settings (loads .env) — no Tesla developer credentials needed
   database.py        # SQLAlchemy async engine
-  main.py            # FastAPI app + lifespan (startup DB, scheduler)
+  main.py            # FastAPI app + lifespan (scheduler only — Alembic handles schema)
   models/            # SQLAlchemy ORM models
   routers/           # API route handlers
   schemas/           # Pydantic request/response models
-  services/          # Business logic
-    tesla_client.py  # Tesla Fleet API wrapper (OAuth, token refresh, encryption)
+  services/
+    tesla_client.py  # Tesla Fleet API wrapper (token refresh, Fernet encryption)
     trip_detector.py # Detects trip start/end from snapshot shift_state transitions
     sync_service.py  # Polls vehicle data, syncs charging history
     cost_calculator.py
-  tasks/scheduler.py # APScheduler background jobs
+  tasks/scheduler.py # APScheduler background jobs (5-min poll)
+backend/alembic/     # Database migrations (run via entrypoint.sh on startup)
 
 frontend/src/
   api/               # Axios API client methods
@@ -45,29 +49,49 @@ frontend/src/
   store/authStore.ts # Zustand auth state
   utils/formatters.ts
   App.tsx            # React Router config
+frontend/nginx.conf  # Production nginx: serves SPA + proxies /api/ to backend, HTTPS
 ```
+
+## Authentication — Token Paste (no developer account needed)
+
+No Tesla developer registration required. Uses the same token approach as TeslaMate:
+
+1. User visits [myteslamate.com/tesla-token](https://www.myteslamate.com/tesla-token) and logs in with Tesla
+2. Copies the Access Token and Refresh Token
+3. Pastes both into the Connect page (`/connect`) in the app
+4. Backend calls `POST /api/auth/connect`, validates tokens against Tesla API, stores encrypted
+
+Tokens auto-refresh in the background. If refresh token expires (~90 days unused), user re-pastes.
 
 ## Environment Setup
 
-Copy `backend/.env.example` to `backend/.env` and fill in:
+Copy `backend/.env.example` to `backend/.env`:
 
 ```
-TESLA_CLIENT_ID=          # From developer.tesla.com
-TESLA_CLIENT_SECRET=
-TESLA_REDIRECT_URI=http://localhost:8000/api/auth/callback
-TESLA_AUDIENCE=https://fleet-api.prd.na.vn.cloud.tesla.com
-ENCRYPTION_KEY=           # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-DATABASE_URL=sqlite+aiosqlite:///./tesla_tracker.db
+ENCRYPTION_KEY=    # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+DATABASE_URL=postgresql+asyncpg://tesla:tesla@db:5432/tesla_tracker
 FRONTEND_URL=http://localhost:5173
 ```
 
-## Database (SQLite, 5 tables)
+No Tesla credentials needed in `.env`.
 
-- **vehicles** — VIN, OAuth tokens (Fernet-encrypted), battery capacity
+## Database (PostgreSQL, 5 tables)
+
+Managed by Alembic — `entrypoint.sh` runs `alembic upgrade head` on every container start.
+
+- **vehicles** — VIN, tokens (Fernet-encrypted), battery capacity
 - **trips** — start/end odometer, kWh used, efficiency (mi/kWh), locations
 - **charge_sessions** — kWh added, charger type, cost (home = kWh × rate; supercharger from Tesla billing)
 - **vehicle_snapshots** — Raw 5-min poll data (shift_state, odometer, battery %, GPS)
 - **settings** — electricity rate, gas price, comparison MPG, sync interval
+
+## Deployment (NAS via GitHub Actions)
+
+- `docker-compose.yml` — local dev (postgres + backend + frontend)
+- `docker-compose.nas.yml` — NAS reference (pulls GHCR images, port 8090, Tailscale cert mounts)
+- `.github/workflows/deploy.yml` — on push to main: builds both images → GHCR → SSH deploy to NAS via Tailscale
+
+NAS deploy dir: `~/tesla-tracker/`. Requires `NAS_TAILSCALE_IP`, `NAS_USER`, `NAS_SSH_KEY`, `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_CLIENT_SECRET` as GitHub secrets.
 
 ## Key Architecture Notes
 
@@ -79,6 +103,8 @@ FRONTEND_URL=http://localhost:5173
 
 **Charger classification** by peak power: ≥50 kW = dc_fast, ≥7 kW = destination, <7 kW = home.
 
+**nginx HTTPS**: Production container listens on 443 with Tailscale-provisioned cert mounted from `/var/lib/tailscale/certs/`. `TAILSCALE_HOSTNAME` must be set in NAS `.env`.
+
 ## Critical Constraint
 
 **SQLAlchemy must be >=2.0.48** — older versions have a Union typing incompatibility with Python 3.14. Do not downgrade.
@@ -86,9 +112,9 @@ FRONTEND_URL=http://localhost:5173
 ## API Routes Summary
 
 ```
-GET  /api/auth/login          # Redirect to Tesla OAuth
-GET  /api/auth/callback       # OAuth callback
+POST /api/auth/connect        # Store pasted access + refresh tokens
 GET  /api/auth/status         # {authenticated, vehicle_count}
+DELETE /api/auth/logout       # Clear all tokens
 GET  /api/vehicles            # List active vehicles
 POST /api/vehicles/sync       # Trigger immediate sync
 GET  /api/trips               # List trips (paginated, filterable)
