@@ -7,7 +7,6 @@ from cryptography.fernet import Fernet
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.models.vehicle import Vehicle
 
 
@@ -43,8 +42,6 @@ async def refresh_access_token(vehicle: Vehicle, db: AsyncSession) -> str:
             TOKEN_URL,
             data={
                 "grant_type": "refresh_token",
-                "client_id": settings.tesla_client_id,
-                "client_secret": settings.tesla_client_secret,
                 "refresh_token": refresh_token,
             },
         )

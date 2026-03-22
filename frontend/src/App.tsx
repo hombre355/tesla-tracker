@@ -5,14 +5,12 @@ import Trips from './pages/Trips'
 import Charging from './pages/Charging'
 import Comparison from './pages/Comparison'
 import Settings from './pages/Settings'
-import AuthCallback from './pages/AuthCallback'
 import Connect from './pages/Connect'
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/connect" element={<Connect />} />
         <Route element={<Layout />}>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
