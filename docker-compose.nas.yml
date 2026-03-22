@@ -1,0 +1,38 @@
+services:
+
+  db:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: tesla
+      POSTGRES_PASSWORD: tesla
+      POSTGRES_DB: tesla_tracker
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tesla -d tesla_tracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  backend:
+    image: ghcr.io/hombre355/tesla-tracker-backend:latest
+    restart: always
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://tesla:tesla@db:5432/tesla_tracker
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    image: ghcr.io/hombre355/tesla-tracker-frontend:latest
+    restart: always
+    ports:
+      - "8090:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
