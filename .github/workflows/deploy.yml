@@ -99,7 +99,7 @@ jobs:
           host: ${{ secrets.NAS_TAILSCALE_IP }}
           username: ${{ secrets.NAS_USER }}
           key: ${{ secrets.NAS_SSH_KEY }}
-          port: 9020
+          port: 9022
           script: |
             mkdir -p ~/tesla-tracker ~/tesla-tracker/pgdata ~/tesla-tracker/backups
             cd ~/tesla-tracker
