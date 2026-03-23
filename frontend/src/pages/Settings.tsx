@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchAuthStatus, syncVehicles } from '../api/vehicles'
 import { useSettings, useUpdateSettings } from '../hooks/useSettings'
@@ -66,23 +67,23 @@ export default function Settings() {
                 {syncMutation.isPending ? <LoadingSpinner /> : null}
                 Sync Now
               </button>
-              <a
-                href="/api/auth/login"
+              <Link
+                to="/connect"
                 className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg text-sm transition-colors"
               >
                 Re-authenticate
-              </a>
+              </Link>
             </div>
           </div>
         ) : (
           <div className="flex items-center justify-between">
             <span className="text-gray-400 text-sm">Not connected</span>
-            <a
-              href="/api/auth/login"
+            <Link
+              to="/connect"
               className="bg-tesla-red hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm transition-colors"
             >
               Connect Tesla Account
-            </a>
+            </Link>
           </div>
         )}
       </div>

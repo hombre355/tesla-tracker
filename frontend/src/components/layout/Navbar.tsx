@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { fetchAuthStatus } from '../../api/vehicles'
 
 export default function Navbar() {
@@ -16,12 +17,12 @@ export default function Navbar() {
           {status.vehicle_count} vehicle{status.vehicle_count !== 1 ? 's' : ''} connected
         </span>
       ) : (
-        <a
-          href="/api/auth/login"
+        <Link
+          to="/connect"
           className="text-sm bg-tesla-red hover:bg-red-700 text-white px-4 py-1.5 rounded-lg transition-colors"
         >
           Connect Tesla
-        </a>
+        </Link>
       )}
     </header>
   )
