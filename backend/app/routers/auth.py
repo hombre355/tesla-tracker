@@ -64,13 +64,17 @@ async def validate_token(body: ValidateTokenRequest):
             (e for e in aud if "fleet-api.prd" in e),
             "fleet-api.prd.na.vn.cloud.tesla.com (default)",
         )
+        scopes = claims.get("scp", claims.get("scope", []))
+        if isinstance(scopes, str):
+            scopes = scopes.split()
         token_info = {
             "expires_at": exp_dt.strftime("%Y-%m-%d %H:%M UTC"),
             "expired": exp_dt < datetime.now(tz=timezone.utc),
             "region": region,
+            "scopes": scopes,
         }
     except Exception:
-        token_info = {"expires_at": None, "expired": None, "region": "unknown"}
+        token_info = {"expires_at": None, "expired": None, "region": "unknown", "scopes": []}
 
     try:
         from app.services.tesla_client import get_vehicles_list

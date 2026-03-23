@@ -16,7 +16,7 @@ export default function Settings() {
   })
 
   const [validateToken, setValidateToken] = useState('')
-  const [validateResult, setValidateResult] = useState<null | { valid: boolean; error: string | null; expires_at: string | null; expired: boolean | null; region: string; vehicle_count: number; vehicles: string[] }>(null)
+  const [validateResult, setValidateResult] = useState<null | { valid: boolean; error: string | null; expires_at: string | null; expired: boolean | null; region: string; scopes: string[]; vehicle_count: number; vehicles: string[] }>(null)
   const [validating, setValidating] = useState(false)
 
   async function handleValidate(e: React.FormEvent) {
@@ -27,7 +27,7 @@ export default function Settings() {
       const res = await import('../api/client').then(m => m.default.post('/auth/validate-token', { access_token: validateToken }))
       setValidateResult(res.data)
     } catch (err: any) {
-      setValidateResult({ valid: false, error: err.response?.data?.detail ?? 'Request failed', expires_at: null, expired: null, region: 'unknown', vehicle_count: 0, vehicles: [] })
+      setValidateResult({ valid: false, error: err.response?.data?.detail ?? 'Request failed', expires_at: null, expired: null, region: 'unknown', scopes: [], vehicle_count: 0, vehicles: [] })
     } finally {
       setValidating(false)
     }
@@ -139,6 +139,9 @@ export default function Settings() {
             )}
             {validateResult.region && validateResult.region !== 'unknown' && (
               <p className="text-gray-300 text-xs">Region: {validateResult.region}</p>
+            )}
+            {validateResult.scopes && validateResult.scopes.length > 0 && (
+              <p className="text-gray-300 text-xs">Scopes: {validateResult.scopes.join(', ')}</p>
             )}
             {validateResult.valid && (
               <p className="text-gray-300 text-xs">
