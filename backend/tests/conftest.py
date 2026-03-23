@@ -23,6 +23,7 @@ from unittest.mock import patch
 
 import pytest
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -39,6 +40,18 @@ async def setup_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
+    # Terminate any stale connections left by tests whose db_session was GC'd
+    # without being properly closed (asyncpg can't close connections after the
+    # event loop closes).  DROP TABLE requires ACCESS EXCLUSIVE which conflicts
+    # with the AccessShareLock held by open read transactions on those connections.
+    async with engine.connect() as conn:
+        await conn.execute(
+            text(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity"
+                " WHERE datname = current_database() AND pid <> pg_backend_pid()"
+            )
+        )
+        await conn.commit()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
     await engine.dispose()
@@ -46,7 +59,22 @@ async def setup_db():
 
 @pytest.fixture(autouse=True)
 async def clean_db():
-    """Truncate every table before each test so tests are fully isolated."""
+    """Truncate every table before each test so tests are fully isolated.
+
+    Also terminates stale connections that hold AccessShareLock from open read
+    transactions left by the previous test's db_session (which can't be closed
+    in teardown due to event-loop scope issues).  Without this, TRUNCATE/DELETE
+    on tables used by those transactions would block indefinitely.
+    """
+    async with engine.connect() as conn:
+        await conn.execute(
+            text(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity"
+                " WHERE datname = current_database() AND pid <> pg_backend_pid()"
+                " AND state = 'idle in transaction'"
+            )
+        )
+        await conn.commit()
     async with engine.begin() as conn:
         for table in reversed(Base.metadata.sorted_tables):
             await conn.execute(table.delete())
