@@ -81,9 +81,14 @@ async def validate_token(body: ValidateTokenRequest):
         vehicles = await get_vehicles_list(token)
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code
+        msg = {
+            401: "Token rejected (HTTP 401) — invalid or expired.",
+            403: "Token rejected (HTTP 403) — insufficient permissions.",
+            412: "HTTP 412 — open the Tesla app and accept any pending Terms of Service, then get a fresh token.",
+        }.get(status, f"Tesla API returned HTTP {status}.")
         return {
             "valid": False,
-            "error": f"Tesla API returned HTTP {status} — token is invalid or expired.",
+            "error": msg,
             **token_info,
             "vehicle_count": 0,
             "vehicles": [],
@@ -116,8 +121,12 @@ async def connect(body: ConnectRequest, db: AsyncSession = Depends(get_db)):
         if status in (401, 403):
             detail = (
                 f"Tesla API rejected the token (HTTP {status}). "
-                "The access token is invalid or expired — get a fresh token from "
-                "myteslamate.com and paste it again."
+                "The access token is invalid or expired — get a fresh token using tesla_auth and paste it again."
+            )
+        elif status == 412:
+            detail = (
+                "Tesla API returned HTTP 412. Open the Tesla mobile app, accept any pending "
+                "Terms of Service or software agreements, then get a fresh token and try again."
             )
         else:
             detail = f"Tesla API returned HTTP {status}. Response: {exc.response.text[:200]}"

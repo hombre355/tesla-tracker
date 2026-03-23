@@ -36,6 +36,12 @@ OWNER_API_BASE = "https://owner-api.teslamotors.com"
 FLEET_BASE = "https://fleet-api.prd.na.vn.cloud.tesla.com"
 TOKEN_URL = "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token"
 
+# Owner API expects requests to look like they come from the Tesla mobile app
+TESLA_HEADERS = {
+    "User-Agent": "Tesla/4.30.6 (iPhone; iOS 17.4; Scale/3.00)",
+    "X-Tesla-User-Agent": "TeslaApp/4.30.6",
+}
+
 
 def api_base_from_token(access_token: str) -> str:
     """Return the correct API base URL for this token.
@@ -97,7 +103,7 @@ async def get_vehicle_data(vehicle: Vehicle, db: AsyncSession) -> Optional[dict[
     url = f"{base}/api/1/vehicles/{vehicle.vin}/vehicle_data"
     params = {"endpoints": "charge_state,drive_state,vehicle_state,climate_state"}
     async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.get(url, headers={"Authorization": f"Bearer {token}"}, params=params)
+        resp = await client.get(url, headers={**TESLA_HEADERS, "Authorization": f"Bearer {token}"}, params=params)
         if resp.status_code == 408:
             return None  # vehicle asleep
         resp.raise_for_status()
@@ -113,7 +119,7 @@ async def get_charging_history(
     url = f"{base}/api/1/dx/charging/history"
     params = {"vin": vehicle.vin, "pageNo": page, "pageSize": 50}
     async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.get(url, headers={"Authorization": f"Bearer {token}"}, params=params)
+        resp = await client.get(url, headers={**TESLA_HEADERS, "Authorization": f"Bearer {token}"}, params=params)
         resp.raise_for_status()
         data = resp.json()
         return data.get("data", [])
@@ -125,7 +131,7 @@ async def get_vehicles_list(access_token: str) -> list[dict[str, Any]]:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(
             f"{base}/api/1/vehicles",
-            headers={"Authorization": f"Bearer {access_token}"},
+            headers={**TESLA_HEADERS, "Authorization": f"Bearer {access_token}"},
         )
         resp.raise_for_status()
         return resp.json().get("response", [])
