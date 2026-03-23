@@ -15,8 +15,8 @@ export default function Connect() {
     setLoading(true)
     try {
       await api.post('/auth/connect', {
-        access_token: accessToken.trim(),
-        refresh_token: refreshToken.trim(),
+        access_token: accessToken.replace(/\s+/g, ''),
+        refresh_token: refreshToken.replace(/\s+/g, ''),
       })
       navigate('/dashboard', { replace: true })
     } catch (err: any) {

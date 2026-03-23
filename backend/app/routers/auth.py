@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +18,11 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 class ConnectRequest(BaseModel):
     access_token: str
     refresh_token: str
+
+    @field_validator("access_token", "refresh_token", mode="before")
+    @classmethod
+    def strip_whitespace(cls, v: str) -> str:
+        return v.replace(" ", "").replace("\n", "").replace("\r", "").replace("\t", "")
 
 
 def _parse_token_expiry(access_token: str) -> datetime:

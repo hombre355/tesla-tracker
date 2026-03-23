@@ -8,6 +8,31 @@ After every code change, update this file (CLAUDE.md) and README.md to reflect a
 
 When adding or modifying backend logic, add or update tests in `backend/tests/`. Tests run automatically in CI before every deploy — a failing test blocks the build.
 
+**After every code change**: run the full test suite locally using Docker. If tests fail, fix the failures before pushing. Only push when all tests pass.
+
+```bash
+# 1. Start a throwaway postgres container
+docker run --rm -d \
+  --name tesla-test-db \
+  -e POSTGRES_USER=tesla \
+  -e POSTGRES_PASSWORD=tesla \
+  -e POSTGRES_DB=tesla_tracker_test \
+  -p 5433:5432 \
+  postgres:17-alpine
+
+# 2. Wait for postgres to be ready, then run tests
+sleep 2
+cd backend && \
+  DATABASE_URL=postgresql+asyncpg://tesla:tesla@localhost:5433/tesla_tracker_test \
+  PYTHONPATH=. \
+  pytest tests/ -v --tb=short
+
+# 3. Stop and remove the container when done
+docker stop tesla-test-db
+```
+
+All tests must pass before pushing. Do not push if any test is failing.
+
 ## Tech Stack
 
 **Backend**: Python FastAPI + PostgreSQL (asyncpg) + SQLAlchemy 2.0+ + Alembic + APScheduler + httpx

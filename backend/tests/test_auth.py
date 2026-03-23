@@ -83,6 +83,38 @@ class TestConnect:
         resp = await client.post("/api/auth/connect", json={})
         assert resp.status_code == 422
 
+    async def test_token_with_embedded_newlines(
+        self, client: AsyncClient, httpx_mock, db_session: AsyncSession
+    ):
+        """Tokens with embedded newlines (common paste artifact) should be stripped and accepted."""
+        httpx_mock.add_response(method="GET", url=VEHICLES_URL, json=VEHICLE_RESPONSE)
+
+        resp = await client.post(
+            "/api/auth/connect",
+            json={
+                "access_token": f"fake\n.access\n.token",
+                "refresh_token": f"fake\n.refresh\n.token",
+            },
+        )
+
+        assert resp.status_code == 200
+
+    async def test_token_with_surrounding_whitespace(
+        self, client: AsyncClient, httpx_mock, db_session: AsyncSession
+    ):
+        """Tokens with leading/trailing spaces should be stripped and accepted."""
+        httpx_mock.add_response(method="GET", url=VEHICLES_URL, json=VEHICLE_RESPONSE)
+
+        resp = await client.post(
+            "/api/auth/connect",
+            json={
+                "access_token": f"  {FAKE_ACCESS}  ",
+                "refresh_token": f"\t{FAKE_REFRESH}\t",
+            },
+        )
+
+        assert resp.status_code == 200
+
     async def test_reconnect_updates_existing_vehicle(
         self, client: AsyncClient, httpx_mock, db_session: AsyncSession
     ):
