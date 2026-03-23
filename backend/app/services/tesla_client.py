@@ -32,16 +32,18 @@ def decrypt_token(token: str) -> str:
     return f.decrypt(token.encode()).decode()
 
 
+OWNER_API_BASE = "https://owner-api.teslamotors.com"
 FLEET_BASE = "https://fleet-api.prd.na.vn.cloud.tesla.com"
 TOKEN_URL = "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token"
 
 
-def fleet_base_from_token(access_token: str) -> str:
-    """Return the region-specific Fleet API base URL extracted from the JWT audience.
+def api_base_from_token(access_token: str) -> str:
+    """Return the correct API base URL for this token.
 
-    Tesla issues tokens with an 'aud' claim containing the correct regional
-    endpoint (na / eu / fe).  Falling back to the NA endpoint keeps behaviour
-    unchanged for existing tokens that lack an audience entry.
+    Tokens from registered Fleet API apps carry a 'fleet-api.prd' audience
+    claim — use the regional Fleet API endpoint for those.  Tokens from
+    tesla_auth / TeslaMate (basic scopes only) have no such claim, so fall
+    back to the older Owner API which accepts them.
     """
     try:
         payload = access_token.split(".")[1]
@@ -55,7 +57,7 @@ def fleet_base_from_token(access_token: str) -> str:
                 return entry.rstrip("/")
     except Exception:
         pass
-    return FLEET_BASE
+    return OWNER_API_BASE
 
 
 async def refresh_access_token(vehicle: Vehicle, db: AsyncSession) -> str:
@@ -91,7 +93,7 @@ async def get_access_token(vehicle: Vehicle, db: AsyncSession) -> str:
 async def get_vehicle_data(vehicle: Vehicle, db: AsyncSession) -> Optional[dict[str, Any]]:
     """Fetch live vehicle_data from Tesla Fleet API."""
     token = await get_access_token(vehicle, db)
-    base = fleet_base_from_token(token)
+    base = api_base_from_token(token)
     url = f"{base}/api/1/vehicles/{vehicle.vin}/vehicle_data"
     params = {"endpoints": "charge_state,drive_state,vehicle_state,climate_state"}
     async with httpx.AsyncClient(timeout=15) as client:
@@ -107,7 +109,7 @@ async def get_charging_history(
 ) -> list[dict[str, Any]]:
     """Fetch charging session history from Tesla Fleet API."""
     token = await get_access_token(vehicle, db)
-    base = fleet_base_from_token(token)
+    base = api_base_from_token(token)
     url = f"{base}/api/1/dx/charging/history"
     params = {"vin": vehicle.vin, "pageNo": page, "pageSize": 50}
     async with httpx.AsyncClient(timeout=15) as client:
@@ -119,7 +121,7 @@ async def get_charging_history(
 
 async def get_vehicles_list(access_token: str) -> list[dict[str, Any]]:
     """Fetch the list of vehicles associated with the account."""
-    base = fleet_base_from_token(access_token)
+    base = api_base_from_token(access_token)
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(
             f"{base}/api/1/vehicles",

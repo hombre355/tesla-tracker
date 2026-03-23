@@ -62,7 +62,7 @@ async def validate_token(body: ValidateTokenRequest):
             aud = [aud]
         region = next(
             (e for e in aud if "fleet-api.prd" in e),
-            "fleet-api.prd.na.vn.cloud.tesla.com (default)",
+            "owner-api.teslamotors.com (default)",
         )
         scopes = claims.get("scp", claims.get("scope", []))
         if isinstance(scopes, str):

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.vehicle import Vehicle
 from app.services.tesla_client import encrypt_token
 
-VEHICLES_URL = "https://fleet-api.prd.na.vn.cloud.tesla.com/api/1/vehicles"
+VEHICLES_URL = "https://owner-api.teslamotors.com/api/1/vehicles"
 
 FAKE_ACCESS = "fake.access.token"
 FAKE_REFRESH = "fake.refresh.token"
