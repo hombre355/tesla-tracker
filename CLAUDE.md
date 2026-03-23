@@ -6,6 +6,8 @@ Personal web app to track Tesla Model 3 driving energy usage, charging costs, an
 
 After every code change, update this file (CLAUDE.md) and README.md to reflect any additions, removals, or modifications to the tech stack, architecture, API routes, environment variables, or deployment process.
 
+When adding or modifying backend logic, add or update tests in `backend/tests/`. Tests run automatically in CI before every deploy — a failing test blocks the build.
+
 ## Tech Stack
 
 **Backend**: Python FastAPI + PostgreSQL (asyncpg) + SQLAlchemy 2.0+ + Alembic + APScheduler + httpx

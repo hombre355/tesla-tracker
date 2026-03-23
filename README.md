@@ -42,7 +42,24 @@ npm run dev
 
 Visit [http://localhost:5173](http://localhost:5173).
 
-### 3. Full stack with Docker
+### 3. Run tests
+
+Requires a PostgreSQL instance (can reuse the Docker one):
+
+```bash
+# Start just the DB
+docker compose up -d db
+
+# Run tests
+DATABASE_URL=postgresql+asyncpg://tesla:tesla@localhost:5432/tesla_tracker_test \
+PYTHONPATH=backend \
+pip install -r backend/requirements-test.txt && \
+pytest backend/tests/ -v
+```
+
+Tests run automatically in CI on every push to `main`. A failure blocks the build and deploy.
+
+### 4. Full stack with Docker
 
 ```bash
 docker compose up --build
