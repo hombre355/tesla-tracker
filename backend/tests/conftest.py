@@ -19,14 +19,17 @@ os.environ.setdefault(
 )
 os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
 
+from unittest.mock import patch
+
 import pytest
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.database import Base, get_db
 from app.main import app
 
-engine = create_async_engine(os.environ["DATABASE_URL"])
+engine = create_async_engine(os.environ["DATABASE_URL"], poolclass=NullPool)
 _session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
 
@@ -50,10 +53,31 @@ async def clean_db():
     yield
 
 
+@pytest.fixture(autouse=True)
+def mock_start_scheduler():
+    """Prevent APScheduler from being called during tests.
+
+    Two patches are needed:
+    - app.main.start_scheduler  — the reference captured by the ASGI lifespan at
+      import time; prevents the scheduler from starting on every AsyncClient startup.
+    - app.tasks.scheduler.start_scheduler  — the canonical location; the settings
+      router imports it inline (inside the function) so it reads this reference at
+      call time, which picks up the mock.
+    """
+    with patch("app.main.start_scheduler"), patch("app.tasks.scheduler.start_scheduler"):
+        yield
+
+
 @pytest.fixture
 async def db_session() -> AsyncSession:
-    async with _session_factory() as session:
-        yield session
+    """Fresh session per test.
+
+    We intentionally do NOT call session.close() in teardown: closing an asyncpg
+    connection requires awaiting, but pytest-asyncio runs function-scoped async
+    fixture teardowns in a new event loop that differs from the one the connection
+    was created in.  With NullPool the connection is terminated by the GC instead.
+    """
+    yield _session_factory()
 
 
 @pytest.fixture

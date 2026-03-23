@@ -53,7 +53,7 @@ async def refresh_access_token(vehicle: Vehicle, db: AsyncSession) -> str:
     vehicle.refresh_token = encrypt_token(data["refresh_token"])
     expires_in = data.get("expires_in", 3600)
     from datetime import timedelta
-    vehicle.token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in - 300)
+    vehicle.token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in - 300)
     await db.commit()
     return data["access_token"]
 

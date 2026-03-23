@@ -57,7 +57,7 @@ def _snapshot(vehicle_id: int, shift_state: str | None, odometer: float, battery
 
 
 def _ts(hour: int) -> datetime:
-    return datetime(2024, 1, 1, hour, 0, 0, tzinfo=timezone.utc)
+    return datetime(2024, 1, 1, hour, 0, 0)  # naive UTC — matches DateTime (no tz) columns
 
 
 # ---------------------------------------------------------------------------

@@ -25,9 +25,9 @@ def _parse_token_expiry(access_token: str) -> datetime:
         payload = access_token.split(".")[1]
         payload += "=" * (4 - len(payload) % 4)
         claims = json.loads(base64.b64decode(payload))
-        return datetime.fromtimestamp(claims["exp"], tz=timezone.utc) - timedelta(seconds=300)
+        return (datetime.fromtimestamp(claims["exp"], tz=timezone.utc) - timedelta(seconds=300)).replace(tzinfo=None)
     except Exception:
-        return datetime.now(timezone.utc) + timedelta(hours=8)
+        return datetime.utcnow() + timedelta(hours=8)
 
 
 @router.post("/connect")
