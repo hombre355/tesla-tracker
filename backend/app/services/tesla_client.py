@@ -1,3 +1,4 @@
+import base64
 import json
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -35,6 +36,28 @@ FLEET_BASE = "https://fleet-api.prd.na.vn.cloud.tesla.com"
 TOKEN_URL = "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token"
 
 
+def fleet_base_from_token(access_token: str) -> str:
+    """Return the region-specific Fleet API base URL extracted from the JWT audience.
+
+    Tesla issues tokens with an 'aud' claim containing the correct regional
+    endpoint (na / eu / fe).  Falling back to the NA endpoint keeps behaviour
+    unchanged for existing tokens that lack an audience entry.
+    """
+    try:
+        payload = access_token.split(".")[1]
+        payload += "=" * (4 - len(payload) % 4)
+        claims = json.loads(base64.b64decode(payload))
+        aud = claims.get("aud", [])
+        if isinstance(aud, str):
+            aud = [aud]
+        for entry in aud:
+            if "fleet-api.prd" in entry:
+                return entry.rstrip("/")
+    except Exception:
+        pass
+    return FLEET_BASE
+
+
 async def refresh_access_token(vehicle: Vehicle, db: AsyncSession) -> str:
     """Refresh the access token using the stored refresh token. Returns new access token."""
     refresh_token = decrypt_token(vehicle.refresh_token)
@@ -60,7 +83,7 @@ async def refresh_access_token(vehicle: Vehicle, db: AsyncSession) -> str:
 
 async def get_access_token(vehicle: Vehicle, db: AsyncSession) -> str:
     """Return a valid access token, refreshing if needed."""
-    if vehicle.token_expires_at and vehicle.token_expires_at < datetime.now(timezone.utc):
+    if vehicle.token_expires_at and vehicle.token_expires_at < datetime.utcnow():
         return await refresh_access_token(vehicle, db)
     return decrypt_token(vehicle.access_token)
 
@@ -68,7 +91,8 @@ async def get_access_token(vehicle: Vehicle, db: AsyncSession) -> str:
 async def get_vehicle_data(vehicle: Vehicle, db: AsyncSession) -> Optional[dict[str, Any]]:
     """Fetch live vehicle_data from Tesla Fleet API."""
     token = await get_access_token(vehicle, db)
-    url = f"{FLEET_BASE}/api/1/vehicles/{vehicle.vin}/vehicle_data"
+    base = fleet_base_from_token(token)
+    url = f"{base}/api/1/vehicles/{vehicle.vin}/vehicle_data"
     params = {"endpoints": "charge_state,drive_state,vehicle_state,climate_state"}
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(url, headers={"Authorization": f"Bearer {token}"}, params=params)
@@ -83,7 +107,8 @@ async def get_charging_history(
 ) -> list[dict[str, Any]]:
     """Fetch charging session history from Tesla Fleet API."""
     token = await get_access_token(vehicle, db)
-    url = f"{FLEET_BASE}/api/1/dx/charging/history"
+    base = fleet_base_from_token(token)
+    url = f"{base}/api/1/dx/charging/history"
     params = {"vin": vehicle.vin, "pageNo": page, "pageSize": 50}
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(url, headers={"Authorization": f"Bearer {token}"}, params=params)
@@ -94,9 +119,10 @@ async def get_charging_history(
 
 async def get_vehicles_list(access_token: str) -> list[dict[str, Any]]:
     """Fetch the list of vehicles associated with the account."""
+    base = fleet_base_from_token(access_token)
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(
-            f"{FLEET_BASE}/api/1/vehicles",
+            f"{base}/api/1/vehicles",
             headers={"Authorization": f"Bearer {access_token}"},
         )
         resp.raise_for_status()

@@ -2,6 +2,7 @@ import base64
 import json
 from datetime import datetime, timedelta, timezone
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -35,10 +36,21 @@ async def connect(body: ConnectRequest, db: AsyncSession = Depends(get_db)):
     """Store Tesla tokens pasted from myteslamate.com or tesla_auth."""
     try:
         vehicles = await get_vehicles_list(body.access_token)
-    except Exception:
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        if status in (401, 403):
+            detail = (
+                f"Tesla API rejected the token (HTTP {status}). "
+                "The access token is invalid or expired — get a fresh token from "
+                "myteslamate.com and paste it again."
+            )
+        else:
+            detail = f"Tesla API returned HTTP {status}. Response: {exc.response.text[:200]}"
+        raise HTTPException(status_code=400, detail=detail)
+    except Exception as exc:
         raise HTTPException(
             status_code=400,
-            detail="Could not reach Tesla API — check that the access token is valid and not expired.",
+            detail=f"Could not reach Tesla API: {exc}",
         )
 
     if not vehicles:
