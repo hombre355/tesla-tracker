@@ -30,8 +30,8 @@ services:
     image: ghcr.io/hombre355/tesla-tracker-frontend:latest
     restart: always
     ports:
-      - "80:80"
-      - "443:443"
+      - "8080:80"
+      - "8443:443"
     volumes:
       # Tailscale cert — provisioned on NAS with: sudo tailscale cert <hostname>
       # TAILSCALE_HOSTNAME must be set in .env, e.g. nas-name.tail12345.ts.net

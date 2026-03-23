@@ -141,8 +141,8 @@ jobs:
                 image: ghcr.io/hombre355/tesla-tracker-frontend:latest
                 restart: always
                 ports:
-                  - "80:80"
-                  - "443:443"
+                  - "8080:80"
+                  - "8443:443"
                 volumes:
                   - /var/lib/tailscale/certs/${TAILSCALE_HOSTNAME}.crt:/etc/nginx/certs/nas.crt:ro
                   - /var/lib/tailscale/certs/${TAILSCALE_HOSTNAME}.key:/etc/nginx/certs/nas.key:ro
