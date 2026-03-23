@@ -36,6 +36,72 @@ def _parse_token_expiry(access_token: str) -> datetime:
         return datetime.utcnow() + timedelta(hours=8)
 
 
+class ValidateTokenRequest(BaseModel):
+    access_token: str
+
+    @field_validator("access_token", mode="before")
+    @classmethod
+    def strip_whitespace(cls, v: str) -> str:
+        return v.replace(" ", "").replace("\n", "").replace("\r", "").replace("\t", "")
+
+
+@router.post("/validate-token")
+async def validate_token(body: ValidateTokenRequest):
+    """Test an access token against Tesla API without storing anything."""
+    token = body.access_token
+
+    # Decode JWT claims for expiry and region info
+    token_info: dict = {}
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * (4 - len(payload) % 4)
+        claims = json.loads(base64.b64decode(payload))
+        exp_dt = datetime.fromtimestamp(claims["exp"], tz=timezone.utc)
+        aud = claims.get("aud", [])
+        if isinstance(aud, str):
+            aud = [aud]
+        region = next(
+            (e for e in aud if "fleet-api.prd" in e),
+            "fleet-api.prd.na.vn.cloud.tesla.com (default)",
+        )
+        token_info = {
+            "expires_at": exp_dt.strftime("%Y-%m-%d %H:%M UTC"),
+            "expired": exp_dt < datetime.now(tz=timezone.utc),
+            "region": region,
+        }
+    except Exception:
+        token_info = {"expires_at": None, "expired": None, "region": "unknown"}
+
+    try:
+        from app.services.tesla_client import get_vehicles_list
+        vehicles = await get_vehicles_list(token)
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        return {
+            "valid": False,
+            "error": f"Tesla API returned HTTP {status} — token is invalid or expired.",
+            **token_info,
+            "vehicle_count": 0,
+            "vehicles": [],
+        }
+    except Exception as exc:
+        return {
+            "valid": False,
+            "error": f"Could not reach Tesla API: {exc}",
+            **token_info,
+            "vehicle_count": 0,
+            "vehicles": [],
+        }
+
+    return {
+        "valid": True,
+        "error": None,
+        **token_info,
+        "vehicle_count": len(vehicles),
+        "vehicles": [v.get("display_name") or v.get("vin") for v in vehicles],
+    }
+
+
 @router.post("/connect")
 async def connect(body: ConnectRequest, db: AsyncSession = Depends(get_db)):
     """Store Tesla tokens pasted from myteslamate.com or tesla_auth."""

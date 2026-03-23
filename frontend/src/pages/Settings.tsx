@@ -15,6 +15,24 @@ export default function Settings() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['auth-status'] }),
   })
 
+  const [validateToken, setValidateToken] = useState('')
+  const [validateResult, setValidateResult] = useState<null | { valid: boolean; error: string | null; expires_at: string | null; expired: boolean | null; region: string; vehicle_count: number; vehicles: string[] }>(null)
+  const [validating, setValidating] = useState(false)
+
+  async function handleValidate(e: React.FormEvent) {
+    e.preventDefault()
+    setValidateResult(null)
+    setValidating(true)
+    try {
+      const res = await import('../api/client').then(m => m.default.post('/auth/validate-token', { access_token: validateToken }))
+      setValidateResult(res.data)
+    } catch (err: any) {
+      setValidateResult({ valid: false, error: err.response?.data?.detail ?? 'Request failed', expires_at: null, expired: null, region: 'unknown', vehicle_count: 0, vehicles: [] })
+    } finally {
+      setValidating(false)
+    }
+  }
+
   const [form, setForm] = useState({
     electricity_rate_per_kwh: '',
     gas_price_per_gallon: '',
@@ -87,6 +105,49 @@ export default function Settings() {
           </div>
         )}
       </div>
+
+      {/* Token Validator */}
+      <form onSubmit={handleValidate} className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
+        <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">1. Test Access Token</h2>
+        <p className="text-xs text-gray-500">Paste an access token to verify it works before connecting.</p>
+        <textarea
+          value={validateToken}
+          onChange={e => setValidateToken(e.target.value)}
+          rows={3}
+          placeholder="ey..."
+          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-xs font-mono focus:outline-none focus:border-tesla-red resize-none"
+        />
+        <button
+          type="submit"
+          disabled={validating || !validateToken}
+          className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+        >
+          {validating ? 'Testing…' : 'Test Token'}
+        </button>
+
+        {validateResult && (
+          <div className={`rounded-lg p-3 text-sm space-y-1 ${validateResult.valid ? 'bg-green-900/40 border border-green-700' : 'bg-red-900/40 border border-red-700'}`}>
+            <p className={`font-semibold ${validateResult.valid ? 'text-green-400' : 'text-red-400'}`}>
+              {validateResult.valid ? '✓ Token is valid' : '✗ Token is invalid'}
+            </p>
+            {validateResult.error && <p className="text-red-300 text-xs">{validateResult.error}</p>}
+            {validateResult.expires_at && (
+              <p className="text-gray-300 text-xs">
+                Expires: {validateResult.expires_at}
+                {validateResult.expired && <span className="text-red-400 ml-2">(expired)</span>}
+              </p>
+            )}
+            {validateResult.region && validateResult.region !== 'unknown' && (
+              <p className="text-gray-300 text-xs">Region: {validateResult.region}</p>
+            )}
+            {validateResult.valid && (
+              <p className="text-gray-300 text-xs">
+                Vehicles: {validateResult.vehicles.length > 0 ? validateResult.vehicles.join(', ') : 'none found'}
+              </p>
+            )}
+          </div>
+        )}
+      </form>
 
       {/* Cost Settings */}
       <form onSubmit={handleSave} className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-4">
