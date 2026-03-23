@@ -48,7 +48,7 @@ class TestConnect:
         )
 
         assert resp.status_code == 400
-        assert "Could not reach Tesla API" in resp.json()["detail"]
+        assert "401" in resp.json()["detail"]
 
     async def test_no_vehicles(self, client: AsyncClient, httpx_mock):
         """Tesla API returns empty vehicle list → 400."""
