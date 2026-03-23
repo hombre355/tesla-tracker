@@ -33,7 +33,7 @@ def _parse_token_expiry(access_token: str) -> datetime:
         claims = json.loads(base64.b64decode(payload))
         return (datetime.fromtimestamp(claims["exp"], tz=timezone.utc) - timedelta(seconds=300)).replace(tzinfo=None)
     except Exception:
-        return datetime.utcnow() + timedelta(hours=8)
+        return datetime.now(tz=timezone.utc).replace(tzinfo=None) + timedelta(hours=8)
 
 
 class ValidateTokenRequest(BaseModel):
